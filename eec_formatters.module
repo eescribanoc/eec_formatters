@@ -1,0 +1,472 @@
+<?php
+/**
+ * @file
+ * Adds extra custom formatters to fields.
+ *
+ * Image, data and link field types.
+ *
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function hook_permission() {
+  return array(
+    'administer eec formatters settings' => array(
+      'title' => t('Administer EEC formatters settings'),
+      'description' => t('Perform administration tasks for EEC formatters.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function eec_formatters_menu() {
+  $items = array();
+
+  $items['admin/config/content/eec_formatters'] = array(
+    'title' => 'Link formatter',
+    'description' => 'Settings for EEC formatters',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('eec_formatters_settings_form'),
+    'access arguments' => array('administer eec formatters settings'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'eec_formatters.admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function eec_formatters_field_formatter_info() {
+  return array(
+    'eec_formatters_button_formatter' => array(
+      'label' => t('Button link with colorbox'),
+      'field types' => array('link_field'),
+      'settings'  => array(
+        'text_title_link' => FALSE,
+        'button_link_text' => t('Send'),
+        'button_link_css' => '',
+        'colorbox_width' => '600px',
+        'colorbox_height' => '80%',
+      ),
+    ),
+    'eec_formatters_anchor_formatter' => array(
+      'label' => t('Anchor with ID'),
+      'field types' => array('text'),
+    ),
+    'eec_formatters_link_formatter' => array(
+      'label' => t('Image link formatter'),
+      'field types' => array('image'),
+      'settings' => array(
+        'image_style' => '',
+        'image_link' => '',
+        'fallback_link' => '',
+        'target_link' => ''
+      ),
+    ),
+    'eec_formatters_date_present' => array(
+      'label' => t('Date range to present'),
+      'field types' => array('date', 'datestamp', 'datetime'),
+      'settings' => array(
+        'range_text' => 'Present',
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_formatter_settings_form().
+ */
+function eec_formatters_field_formatter_settings_form($field, $instance, $view_mode, $form, &$form_state) {
+  //This gets the view_mode where our settings are stored
+  $display = $instance['display'][$view_mode];
+  //This gets the actual settings
+  $settings = $display['settings'];
+  //Initialize the element variable
+  $element = array();
+  switch ($display['type']) {
+    case 'eec_formatters_button_formatter':
+      $element['text_title_link'] = array(
+        '#type'           => 'checkbox',
+        '#title'          => t('Use the title from the link as text'),
+        '#description'    => t('If checked and title for the link is filled it will show as text for the link. If the title is not filled then the fallback will be render the Link text in the settings.'),
+        '#default_value'  => $settings['text_title_link'],
+      );
+      $element['button_link_text'] = array(
+        '#type'           => 'textfield',
+        '#title'          => t('Link text'),
+        '#description'    => t('This text will appear in the button.'),
+        '#default_value'  => $settings['button_link_text'],
+      );
+      $element['button_link_css'] = array(
+        '#type'           => 'textfield',
+        '#title'          => t('Link css class'),
+        '#description'    => t('This class will be added to the link.'),
+        '#default_value'  => $settings['button_link_css'],
+      );
+      $element['colorbox_width'] = array(
+        '#type'           => 'textfield',
+        '#title'          => t('Colorbox width'),
+        '#description'    => t('This will determine the width from the colorbox.'),
+        '#default_value'  => $settings['colorbox_width'],
+      );
+      $element['colorbox_height'] = array(
+        '#type'           => 'textfield',
+        '#title'          => t('Colorbox height'),
+        '#description'    => t('This will determine the height from the colorbox.'),
+        '#default_value'  => $settings['colorbox_height'],
+      );
+      break;
+    case 'eec_formatters_link_formatter':
+      $image_styles = image_style_options(FALSE);
+      $element['image_style'] = array('#title' => t('Image style'), '#type' => 'select', '#default_value' => $settings['image_style'], '#empty_option' => t('None (original image)'), '#options' => $image_styles, );
+
+      $link_types = eec_link_formatter_image_field_link_types($instance);
+      $element['image_link'] = array(
+        '#title' => t('Link image to'),
+        '#description' => t('Select a field to retrieve the link(s) from.'),
+        '#type' => 'select',
+        '#default_value' => $settings['image_link'],
+        '#empty_option' => t('Nothing'),
+        '#options' => $link_types,
+      );
+      if (in_array($instance['entity_type'], variable_get('eec_formatters_link_formatter_entities_with_fallback', array('node', 'user')), TRUE)) {
+        $fallback_links = eec_link_formatter_image_secondary_field_link_types($instance);
+        $element['fallback_link'] = array(
+          '#title' => t('Fallback'),
+          '#description' => t('If there is no value for the chosen field, where should the image link to?'),
+          '#type' => 'select',
+          '#default_value' => $settings['fallback_link'],
+          '#empty_option' => t('No link'),
+          '#options' => $fallback_links,
+        );
+      }
+      break;
+    case 'ecc_formatters_date_present':
+      $element['range_text'] = array(
+        '#type'           => 'textfield',
+        '#title'          => t('Text for the range date'),
+        '#description'    => t('This value will render only in the case that there is no end date. So the event is still current.'),
+        '#default_value'  => $settings['range_text'],
+      );
+      break;
+  }
+  return $element;
+}
+
+
+/**
+ * Implements hook_field_formatter_settings_summary().
+ */
+function eec_formatters_field_formatter_settings_summary($field, $instance, $view_mode) {
+  $display = $instance['display'][$view_mode];
+  $settings = $display['settings'];
+  $summary = array();
+  switch ($display['type']) {
+    case 'eec_formatters_button_formatter':
+      $text = ($settings['text_title_link']) ? 'This link uses the title from the link as text with fallback text ' : 'This link uses custom text ';
+      $class = !empty($settings['button_link_css']) ? 'Class: @button_link_css. ' : '';
+      $summary = t($text . '"@button_link_text". ' . $class . 'Colorbox width: @colorbox_width. Colorbox height: @colorbox_height', array(
+        '@button_link_text'     => $settings['button_link_text'],
+        '@button_link_css'     => $settings['button_link_css'],
+        '@colorbox_width'     => $settings['colorbox_width'],
+        '@colorbox_height'     => $settings['colorbox_height'],
+      )); // we use t() for translation and placeholders to guard against attacks
+      break;
+    case 'eec_formatters_anchor_formatter':
+      $summary = t('This will be rendered as !anchor', array('!anchor' => '<a id="anchor-id"></a>'));
+      break;
+    case 'eec_formatters_link_formatter':
+      $summary = array();
+      $image_styles = image_style_options(FALSE);
+
+      // Unset possible 'No defined styles' option.
+      unset($image_styles['']);
+
+      // Styles could be lost because of enabled/disabled modules that defines
+      // their styles in code.
+      if (isset($image_styles[$settings['image_style']])) {
+        $summary[] = t('Image style: @style', array('@style' => $image_styles[$settings['image_style']]));
+      }
+      else {
+        $summary[] = t('Original image');
+      }
+
+      $link_types = eec_link_formatter_image_field_link_types($instance);
+      // Display this setting only if image is linked.
+      if (isset($link_types[$settings['image_link']])) {
+        $summary[] = t('Uses links from') . filter_xss_admin($link_types[$settings['image_link']]);
+      }
+
+      if ($settings['fallback_link'] != NULL) {
+        $summary[] = t('Fallback Option: ' . $settings['fallback_link']);
+      }
+      return implode('<br />', $summary);
+      break;
+    case 'eec_formatters_date_present':
+      $summary = t('If there is no end date it will render like Startdate - @range_text', array('range_text' => $settings['range_text']));
+      break;
+  }
+  return $summary;
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function eec_formatters_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $element = array(); // Initialize the var
+  $settings = $display['settings']; // Get the settings
+  switch ($display['type']) {
+    case 'eec_formatters_button_formatter':
+        // This variable colorbox_opacity comes from the colorbox module.
+      $settings['opacity'] = variable_get('colorbox_opacity', 0.9);
+      foreach ($items as $item) {
+        // It seems that it doesn't work how it is supposed with iframe. So we need custom js to launch it.
+        // If this gets fixed then we can use the default colorbox settings.
+        if (variable_get('eec_formatters_button_formatter_use_custom_colorbox_js', TRUE)) {
+          drupal_add_js(
+            'jQuery(document).ready(function () {
+             jQuery(".colorbox-load-iframe").colorbox({iframe: true, width: "' . $settings['colorbox_width'] . '", height: "' . $settings['colorbox_height'] . '", title: false, opacity: "' . $settings['opacity'] . '"});
+           });',
+            ['type' => 'inline', 'scope' => 'footer', 'weight' => 5]
+          );
+        }
+        $button_link_text = ($settings['text_title_link'] && !empty($item['title'])) ? $item['title'] : $settings['button_link_text'];
+        $options = [
+          'html' => FALSE,
+          'attributes' => [
+            'alt' => $button_link_text,
+            'class' => ['colorbox-load'],
+          ],
+          'query' => [
+            'iframe' => TRUE,
+            'width' => $settings['colorbox_width'],
+            'height' => $settings['colorbox_height'],
+          ],
+        ];
+        // It seems that it doesn't work how it is supposed with iframe. So we need custom js to launch it.
+        // If this gets fixed then we can use the default colorbox settings.
+        if (variable_get('eec_formatters_button_formatter_use_custom_colorbox_js', TRUE)) {
+          $options['attributes']['class'] = ['colorbox-load-iframe'];
+        }
+        if (variable_get('eec_formatters_button_formatter_unset_colorbox_query', TRUE)) {
+          unset($options['query']);
+        }
+        // Add css class from settings.
+        if (!empty($settings['button_link_css'])) {
+          $options['attributes']['class'][] = $settings['button_link_css'];
+        }
+        $element[0]['#markup'] = l(t($button_link_text), $item['url'], $options); // Assign it to the #markup of the element
+      }
+      break;
+    case 'eec_formatters_anchor_formatter':
+      foreach ($items as $item) {
+        $element[0]['#markup'] = "<a id='{$item['value']}'></a>";
+      }
+      break;
+    case 'eec_formatters_link_formatter':
+      // Check if the formatter involves a link.
+      $link_src_fieldname = $display['settings']['image_link'];
+
+      // Check if there is af  fallback options chosen.
+      $fallback_link_option = $display['settings']['fallback_link'];
+
+      // Let's start with the assumption we won't need the fallback options
+      $fallback = FALSE;
+      $fallback_path = NULL;
+
+      // Let's determine what the link target will be...
+      $target_link = $display['settings']['target_link'];
+
+      // Store our URL's in an array.
+      $urls = array();
+
+      if ($link_src_fieldname) {
+        // image_link_type is not file
+        if (isset($entity->{$link_src_fieldname})) {
+
+          // Let's see what from what type of field we are going to extract the link.
+          $link_field_type = field_info_field($link_src_fieldname)['type'];
+
+          // Let's check if the target field can have multiple values, or only 1.
+          $cardinality = field_info_field($link_src_fieldname)['cardinality'];
+        }
+      }
+
+      // Retreive the field we are getting the link from
+      $link_src_field = $entity->{$link_src_fieldname};
+
+      // Retrieve the language of the source field.
+      $language = field_language($entity_type, $entity, field_info_field($link_src_fieldname)['field_name']);
+      $language = (is_array($language)) ? current($language) : $language;
+
+      //Check if there are values in our chosen field, otherwise use the fallback field.
+      if (isset($link_src_field[$language])) {
+        // Retrieve links from node reference field.
+        if ($link_field_type == 'node_reference') {
+          if (isset($link_src_field[$language])) {
+            foreach ($link_src_field[$language] as $node) {
+              $urls[]['url'] = 'node/' . $node['nid'];
+            };
+          }
+        }
+
+        // Retrieve links from link field.
+        if ($link_field_type == 'link_field') {
+          if (isset($link_src_field[$language])) {
+            foreach ($link_src_field[$language] as $item) {
+              $urls[]['url'] = $item['url'];
+              //$urls[]['target'] = ''; @todo, retrieve target
+            };
+          }
+        }
+        // Retrieve links from entityreference field.
+        if ($link_field_type == 'entityreference') {
+          $reference_entity_type = field_info_field($link_src_fieldname)['settings']['target_type'];
+          if (isset($link_src_field[$language])) {
+            foreach ($link_src_field[$language] as $item) {
+              // generate a path to the entity:
+              $path = entity_uri($reference_entity_type, $item['entity'])['path'];
+              $urls[]['url'] = $path;
+              //$urls[]['target'] = ''; @todo, retrieve target
+            };
+          }
+        }
+      }
+
+      // Discover the fall back link.
+      if ($fallback_link_option == 'current_entity') {
+        $fallback_path = entity_uri($entity_type, $entity)['path'];
+      }
+
+      // Did we find any URL? Do we need to use the fallback for all links?
+      if (empty($urls)) {
+        $fallback = TRUE;
+      };
+      // Now render the items.
+      if ($cardinality == '1') {
+        // The chosen target field has only one value, use it to link all items to.
+        foreach ($items as $delta => $item) {
+          // Do we have an url for this delta?
+          if (!empty($urls)) {
+            $uri = [
+              'path' => $urls[0]['url'],
+              'options' => ['attributes' => ['target' => $target_link]],
+            ];
+          }
+          // There are no valid URL's Use the fallback if this is configured.
+          else {
+            if ($fallback) {
+              $uri = ['path' => $fallback_path];
+            }
+          }
+          $element[$delta] = [
+            '#theme' => 'image_formatter',
+            '#item' => $item,
+            '#image_style' => $display['settings']['image_style'],
+            '#path' => isset($uri) ? $uri : '',
+          ];
+        }
+      }
+      else {
+        // The chosen target field has multiple values, map each item in the
+        // original field to a link form the target field.
+        foreach ($items as $delta => $item) {
+          // Do we have an url for this delta?
+          if (!empty($urls)) {
+            if (isset($urls[$delta])) {
+              $uri = [
+                'path' => $urls[$delta]['url'],
+                'options' => ['attributes' => ['target' => $target_link]],
+              ];
+            }
+            // If there are more image values than link values unset the link.
+            else {
+              if (!empty($fallback_path)) {
+                // can we use the fallback path?
+                $uri = ['path' => $fallback_path];
+              }
+              else {
+                // otherwise don't use the link.
+                unset($uri);
+              }
+            }
+          }
+          // There are no valid URL's Use the fallback if this is configured.
+          else {
+            if ($fallback) {
+              $uri = ['path' => $fallback_path];
+            }
+          }
+          $element[$delta] = [
+            '#theme' => 'image_formatter',
+            '#item' => $item,
+            '#image_style' => $display['settings']['image_style'],
+            '#path' => isset($uri) ? $uri : '',
+          ];
+        }
+      }
+      break;
+    case 'eec_formatters_date_present':
+      // Prepare variables to call the regular interval formatter.
+      $display_interval = $display;
+      // Set type as date_interval.
+      $display_interval['type'] = 'date_interval';
+      // Call date_field_formatter_view to retrieve all the markups like date would render them.
+      $element_interval = date_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display_interval);
+      // Go through all the items.
+      foreach ($items as $delta => $item) {
+        // If the start date and the end date are the same, then end date is not filled. That is how the date module handles it.
+        // When there is no end date, then the date is until Present.
+        $element[$delta] = ['#markup' => $element_interval[$delta]['#markup'] . (($item['value'] == $item['value2']) ? ' - ' . t($settings['range_text']) : '')];
+      }
+      break;
+  }
+  return $element;
+}
+
+/**
+ * Helper function to compute the list of possible link types.
+ */
+function eec_link_formatter_image_field_link_types($instance) {
+  $link_types = array();
+  // If the link module is installed, allow any link fields to be used.
+  foreach (field_info_fields() as $field_key => $field_info) {
+    if ($field_info['type'] == 'link_field') {
+      $field_instance = field_info_instance($instance['entity_type'], $field_info['field_name'], $instance['bundle']);
+      if ($field_instance) {
+        $link_types[$field_key] = "$field_instance[label] ($field_info[field_name])";
+      }
+    }
+    // Node reference can also be used.
+    if ($field_info['type'] == 'node_reference') {
+      $field_instance = field_info_instance($instance['entity_type'], $field_info['field_name'], $instance['bundle']);
+      if ($field_instance) {
+        $link_types[$field_key] = "$field_instance[label] ($field_info[field_name])";
+      }
+    }
+    // Or even better entity reference.
+    if ($field_info['type'] == 'entityreference') {
+      $field_instance = field_info_instance($instance['entity_type'], $field_info['field_name'], $instance['bundle']);
+      if ($field_instance) {
+        $link_types[$field_key] = "$field_instance[label] ($field_info[field_name])";
+      }
+    }
+  }
+  return $link_types;
+}
+
+/**
+ * Option types.
+ *
+ * @param $instance
+ * @return array
+ */
+function eec_link_formatter_image_secondary_field_link_types($instance) {
+  $link_types = array('current_entity' => t('Current Entity'), );
+  return $link_types;
+}

@@ -1,0 +1,11 @@
+name = EEC extra formatters
+description = "Adds extra custom formatters to fields for image, link and date field types."
+package = EEC Custom
+core = 7.x
+
+files[] = eec_formatters.module
+
+dependencies[] = link
+dependencies[] = image
+dependencies[] = date
+dependencies[] = colorbox
